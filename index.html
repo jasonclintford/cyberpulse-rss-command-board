@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CyberPulse RSS Command Board</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=Manrope:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-wrap">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div>
+            <h1>CyberPulse</h1>
+            <p class="brand-sub">RSS command board for cyber threat awareness</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button id="refreshBtn" class="btn btn-ghost" type="button">Refresh</button>
+          <button id="exportBtn" class="btn btn-ghost" type="button">Export</button>
+          <button id="importBtn" class="btn btn-ghost" type="button">Import</button>
+          <input id="importFile" type="file" accept="application/json" hidden />
+        </div>
+      </header>
+
+      <section class="status-strip" aria-label="status and time">
+        <span id="todayLabel" class="today-label"></span>
+        <span id="statusLine" class="status-line" role="status" aria-live="polite"></span>
+      </section>
+
+      <section class="controls-panel" aria-label="feed controls">
+        <form id="addFeedForm" class="feed-form">
+          <input id="feedCategory" name="category" type="text" placeholder="Category (e.g. Malware)" required />
+          <input id="feedName" name="name" type="text" placeholder="Feed label (e.g. Talos Blog)" required />
+          <input id="feedUrl" name="url" type="url" placeholder="RSS URL" required />
+          <button class="btn btn-primary" type="submit">Add Feed</button>
+        </form>
+        <div id="feedTags" class="feed-tags" aria-label="configured feeds"></div>
+      </section>
+
+      <section class="view-switch" aria-label="page view switcher">
+        <button id="viewDashboardBtn" class="btn btn-ghost view-btn active" type="button">Dashboard</button>
+        <button id="viewSourcesBtn" class="btn btn-ghost view-btn" type="button">Sources</button>
+      </section>
+
+      <section id="dashboardView" class="view-pane">
+        <section class="kpi-grid" aria-label="dashboard metrics">
+          <article class="kpi-card">
+            <h2>Signals (24h)</h2>
+            <p id="kpiSignals" class="kpi-value">-</p>
+          </article>
+          <article class="kpi-card">
+            <h2>High Risk Hits</h2>
+            <p id="kpiHighRisk" class="kpi-value">-</p>
+          </article>
+          <article class="kpi-card">
+            <h2>Sources Online</h2>
+            <p id="kpiSources" class="kpi-value">-</p>
+          </article>
+          <article class="kpi-card">
+            <h2>Cyber Risk Index</h2>
+            <p id="kpiRisk" class="kpi-value">-</p>
+          </article>
+        </section>
+
+        <section class="analytics-grid" aria-label="visual analytics">
+          <article class="viz-card">
+            <h3>Attack Pulse (24h)</h3>
+            <div id="activityChart" class="activity-chart"></div>
+          </article>
+          <article class="viz-card">
+            <h3>Category Load</h3>
+            <div id="categoryChart" class="category-chart"></div>
+          </article>
+          <article class="viz-card">
+            <h3>Top Threat Terms</h3>
+            <div id="keywordChart" class="keyword-chart"></div>
+          </article>
+          <article class="viz-card">
+            <h3>EPSS Watchlist</h3>
+            <ul id="epssList" class="epss-list"></ul>
+          </article>
+        </section>
+
+        <nav id="categoryNav" class="category-nav" aria-label="story categories"></nav>
+
+        <section id="threatTicker" class="threat-ticker" aria-label="live threat ticker"></section>
+
+        <main>
+          <div id="board" class="board" aria-live="polite"></div>
+        </main>
+      </section>
+
+      <section id="sourcesView" class="view-pane" hidden>
+        <section class="sources-header" aria-label="source page controls">
+          <p id="sourceSummary" class="source-summary"></p>
+          <input
+            id="sourceSearch"
+            class="source-search"
+            type="search"
+            placeholder="Filter by source, category, or URL"
+            autocomplete="off"
+          />
+        </section>
+        <nav id="sourceCategoryNav" class="category-nav source-category-nav" aria-label="source category filter"></nav>
+        <div id="sourceBoard" class="source-board" aria-live="polite"></div>
+      </section>
+    </div>
+
+    <template id="sectionTemplate">
+      <article class="section-card">
+        <header class="section-head">
+          <h2></h2>
+          <span class="section-count"></span>
+        </header>
+        <ul class="story-list"></ul>
+        <a class="more-link" href="#"></a>
+      </article>
+    </template>
+
+    <template id="storyTemplate">
+      <li class="story-row">
+        <a class="story-link" target="_blank" rel="noopener noreferrer"></a>
+        <span class="story-meta"></span>
+      </li>
+    </template>
+
+    <template id="sourceTemplate">
+      <article class="source-card">
+        <header class="source-head">
+          <h2 class="source-title"></h2>
+          <span class="source-state"></span>
+        </header>
+        <p class="source-meta">
+          <span class="source-category"></span>
+          <a class="source-url" target="_blank" rel="noopener noreferrer"></a>
+        </p>
+        <ul class="source-story-list"></ul>
+        <a class="more-link source-more-link" href="#"></a>
+      </article>
+    </template>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
