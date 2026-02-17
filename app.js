@@ -7,6 +7,8 @@ const SOURCE_COLLAPSED_STORIES = 8;
 const MAX_STORIES_PER_SOURCE = 60;
 const MAX_TICKER_ITEMS = 12;
 const EPSS_LIMIT = 8;
+const FETCH_TIMEOUT_MS = 12000;
+const FEED_TIMEOUT_MS = 26000;
 
 const CATEGORY_ORDER = ["Threat Intel", "Vulnerabilities", "Breaches", "Malware", "Policy", "Research"];
 
@@ -490,7 +492,9 @@ async function refreshDashboard() {
   setStatus("Loading cyber feeds and telemetry...");
 
   try {
-    const results = await Promise.allSettled(state.config.feeds.map((feed) => loadFeedStories(feed)));
+    const results = await Promise.allSettled(
+      state.config.feeds.map((feed) => withTimeout(loadFeedStories(feed), FEED_TIMEOUT_MS, `${feed.name} timed out`))
+    );
     const grouped = groupStories(results, state.config.feeds);
 
     state.sections = grouped.sections;
@@ -587,7 +591,7 @@ async function loadRssStories(feed) {
 }
 
 async function loadNvdStories(feed) {
-  const response = await fetch(buildRecentNvdUrl(feed.url), {
+  const response = await fetchWithTimeout(buildRecentNvdUrl(feed.url), {
     headers: {
       Accept: "application/json"
     }
@@ -654,7 +658,7 @@ async function loadNvdStories(feed) {
 }
 
 async function fetchText(url, isProxy = false) {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       Accept: "application/rss+xml, application/xml, text/xml, application/atom+xml, */*"
     }
@@ -678,7 +682,11 @@ async function fetchText(url, isProxy = false) {
 
 async function fetchViaRss2Json(url) {
   const endpoint = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
-  const response = await fetch(endpoint);
+  const response = await fetchWithTimeout(endpoint, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
 
   if (!response.ok) {
     throw new Error(`rss2json HTTP ${response.status}`);
@@ -1336,7 +1344,7 @@ function buildMetricRow(label, value, max) {
 async function refreshEpssTelemetry() {
   try {
     const endpoint = `https://api.first.org/data/v1/epss?order=!epss&limit=${EPSS_LIMIT}`;
-    const response = await fetch(endpoint, {
+    const response = await fetchWithTimeout(endpoint, {
       headers: {
         Accept: "application/json"
       }
@@ -1602,6 +1610,43 @@ function isBotChallengePage(text) {
 
 function buildCodeTabsProxy(url) {
   return `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error && error.name === "AbortError") {
+      throw new Error(`Request timeout after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(message || `Timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
 }
 
 function buildRecentNvdUrl(baseUrl) {
