@@ -167,6 +167,14 @@ const state = {
   sections: new Map(),
   sourceGroups: [],
   feedHealth: new Map(),
+  loadingProgress: {
+    active: false,
+    total: 0,
+    completed: 0,
+    success: 0,
+    failed: 0,
+    currentFeed: ""
+  },
   epssItems: [],
   nvdSummary: {
     critical: 0,
@@ -197,6 +205,10 @@ const ui = {
   importFile: document.getElementById("importFile"),
   todayLabel: document.getElementById("todayLabel"),
   statusLine: document.getElementById("statusLine"),
+  loadProgress: document.getElementById("loadProgress"),
+  loadProgressText: document.getElementById("loadProgressText"),
+  loadProgressCount: document.getElementById("loadProgressCount"),
+  loadProgressFill: document.getElementById("loadProgressFill"),
   activityChart: document.getElementById("activityChart"),
   categoryChart: document.getElementById("categoryChart"),
   keywordChart: document.getElementById("keywordChart"),
@@ -408,6 +420,8 @@ function switchView(view) {
   renderViewSwitch();
 
   if (view === "sources") {
+    renderSourceCategoryNav();
+    renderSourcesPage();
     setStatus("Viewing source websites page.");
   } else {
     setStatus("Viewing dashboard.");
@@ -418,6 +432,8 @@ function handleHashChange() {
   if (window.location.hash === "#sources" && state.activeView !== "sources") {
     state.activeView = "sources";
     renderViewSwitch();
+    renderSourceCategoryNav();
+    renderSourcesPage();
     return;
   }
 
@@ -477,11 +493,14 @@ async function refreshDashboard() {
     state.feedHealth = new Map();
     state.expandedSections.clear();
     state.expandedSources.clear();
+    finishLoadingProgress();
     renderCategoryNav();
     renderThreatTicker();
     renderBoard();
-    renderSourceCategoryNav();
-    renderSourcesPage();
+    if (state.activeView === "sources") {
+      renderSourceCategoryNav();
+      renderSourcesPage();
+    }
     renderTelemetry();
     renderEpss();
     setStatus("No feeds configured.", true);
@@ -489,11 +508,12 @@ async function refreshDashboard() {
   }
 
   state.isLoading = true;
+  startLoadingProgress(state.config.feeds.length);
   setStatus("Loading cyber feeds and telemetry...");
 
   try {
-    const results = await Promise.allSettled(
-      state.config.feeds.map((feed) => withTimeout(loadFeedStories(feed), FEED_TIMEOUT_MS, `${feed.name} timed out`))
+    const results = await Promise.all(
+      state.config.feeds.map((feed) => loadFeedWithProgress(feed))
     );
     const grouped = groupStories(results, state.config.feeds);
 
@@ -518,8 +538,10 @@ async function refreshDashboard() {
     renderCategoryNav();
     renderThreatTicker();
     renderBoard();
-    renderSourceCategoryNav();
-    renderSourcesPage();
+    if (state.activeView === "sources") {
+      renderSourceCategoryNav();
+      renderSourcesPage();
+    }
     renderTelemetry();
 
     await refreshEpssTelemetry();
@@ -545,14 +567,89 @@ async function refreshDashboard() {
     renderCategoryNav();
     renderThreatTicker();
     renderBoard();
-    renderSourceCategoryNav();
-    renderSourcesPage();
+    if (state.activeView === "sources") {
+      renderSourceCategoryNav();
+      renderSourcesPage();
+    }
     renderTelemetry();
     renderEpss();
 
     setStatus(error.message || "Failed to refresh dashboard.", true);
   } finally {
     state.isLoading = false;
+    finishLoadingProgress();
+  }
+}
+
+async function loadFeedWithProgress(feed) {
+  try {
+    const stories = await withTimeout(loadFeedStories(feed), FEED_TIMEOUT_MS, `${feed.name} timed out`);
+    updateLoadingProgress(feed.name, true);
+    return {
+      status: "fulfilled",
+      value: stories
+    };
+  } catch (error) {
+    updateLoadingProgress(feed.name, false);
+    return {
+      status: "rejected",
+      reason: error
+    };
+  }
+}
+
+function startLoadingProgress(total) {
+  state.loadingProgress.active = true;
+  state.loadingProgress.total = total;
+  state.loadingProgress.completed = 0;
+  state.loadingProgress.success = 0;
+  state.loadingProgress.failed = 0;
+  state.loadingProgress.currentFeed = "";
+  renderLoadingProgress();
+}
+
+function updateLoadingProgress(feedName, ok) {
+  if (!state.loadingProgress.active) {
+    return;
+  }
+
+  state.loadingProgress.completed += 1;
+  if (ok) {
+    state.loadingProgress.success += 1;
+  } else {
+    state.loadingProgress.failed += 1;
+  }
+  state.loadingProgress.currentFeed = feedName;
+  renderLoadingProgress();
+}
+
+function finishLoadingProgress() {
+  state.loadingProgress.active = false;
+  renderLoadingProgress();
+}
+
+function renderLoadingProgress() {
+  if (!ui.loadProgress || !ui.loadProgressFill || !ui.loadProgressText || !ui.loadProgressCount) {
+    return;
+  }
+
+  if (!state.loadingProgress.active || state.loadingProgress.total <= 0) {
+    ui.loadProgress.hidden = true;
+    ui.loadProgressFill.style.width = "0%";
+    return;
+  }
+
+  const { total, completed, success, failed, currentFeed } = state.loadingProgress;
+  const percent = Math.max(0, Math.min(100, Math.round((completed / total) * 100)));
+
+  ui.loadProgress.hidden = false;
+  ui.loadProgressFill.style.width = `${percent}%`;
+  ui.loadProgressCount.textContent = `${completed}/${total} (${percent}%)`;
+
+  if (currentFeed) {
+    ui.loadProgressText.textContent = `Loading feeds... ${success} ok, ${failed} failed (latest: ${currentFeed})`;
+  } else {
+    ui.loadProgressText.textContent = "Loading feeds...";
   }
 }
 
@@ -565,29 +662,25 @@ async function loadFeedStories(feed) {
 }
 
 async function loadRssStories(feed) {
-  const attempts = [
-    async () => parseXmlFeed(await fetchText(feed.url)).items,
-    async () => parseXmlFeed(await fetchText(buildCodeTabsProxy(feed.url), true)).items,
-    async () => fetchViaRss2Json(feed.url)
-  ];
+  let items = [];
 
-  let lastError = new Error("Unknown feed error.");
-
-  for (const attempt of attempts) {
-    try {
-      const items = await attempt();
-      const stories = items.map((item) => mapRssStory(item, feed)).filter(Boolean);
-      if (!stories.length) {
-        throw new Error("No stories found.");
-      }
-
-      return stories.slice(0, MAX_STORIES_PER_SOURCE);
-    } catch (error) {
-      lastError = error;
-    }
+  try {
+    // Try direct and proxy in parallel so CORS-blocked feeds don't stall the full load.
+    items = await firstSuccessful([
+      async () => parseXmlFeed(await fetchText(feed.url)).items,
+      async () => parseXmlFeed(await fetchText(buildCodeTabsProxy(feed.url), true)).items
+    ]);
+  } catch {
+    // Fall back to JSON conversion when both XML routes fail.
+    items = await fetchViaRss2Json(feed.url);
   }
 
-  throw new Error(lastError.message || `${feed.name} unavailable.`);
+  const stories = items.map((item) => mapRssStory(item, feed)).filter(Boolean);
+  if (!stories.length) {
+    throw new Error("No stories found.");
+  }
+
+  return stories.slice(0, MAX_STORIES_PER_SOURCE);
 }
 
 async function loadNvdStories(feed) {
@@ -1646,6 +1739,29 @@ function withTimeout(promise, timeoutMs, message) {
         clearTimeout(timeoutId);
         reject(error);
       });
+  });
+}
+
+function firstSuccessful(attemptFactories) {
+  return new Promise((resolve, reject) => {
+    const errors = [];
+    let settledCount = 0;
+
+    for (const attemptFactory of attemptFactories) {
+      Promise.resolve()
+        .then(() => attemptFactory())
+        .then((value) => {
+          resolve(value);
+        })
+        .catch((error) => {
+          errors.push(error);
+          settledCount += 1;
+          if (settledCount === attemptFactories.length) {
+            const message = errors[errors.length - 1]?.message || "All feed routes failed.";
+            reject(new Error(message));
+          }
+        });
+    }
   });
 }
 

@@ -35,6 +35,16 @@
         <span id="statusLine" class="status-line" role="status" aria-live="polite"></span>
       </section>
 
+      <section id="loadProgress" class="load-progress" aria-label="loading progress" hidden>
+        <div class="load-progress-head">
+          <span id="loadProgressText">Loading feeds...</span>
+          <span id="loadProgressCount">0%</span>
+        </div>
+        <div class="load-progress-track">
+          <div id="loadProgressFill" class="load-progress-fill"></div>
+        </div>
+      </section>
+
       <section class="controls-panel" aria-label="feed controls">
         <form id="addFeedForm" class="feed-form">
           <input id="feedCategory" name="category" type="text" placeholder="Category (e.g. Malware)" required />

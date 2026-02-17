@@ -155,6 +155,41 @@ h1 {
   color: var(--warn);
 }
 
+.load-progress {
+  border-bottom: 1px solid var(--line);
+  padding: 0.48rem 1.1rem 0.62rem;
+  background: linear-gradient(180deg, rgba(8, 20, 36, 0.92) 0%, rgba(7, 18, 31, 0.8) 100%);
+}
+
+.load-progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  font-size: 0.78rem;
+  color: #b8d3f0;
+  margin-bottom: 0.36rem;
+}
+
+.load-progress-track {
+  height: 8px;
+  border: 1px solid #31597d;
+  border-radius: 999px;
+  background: #0d1d32;
+  overflow: hidden;
+}
+
+.load-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #27d5a0 0%, #2aa5e2 100%),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0.18) 8px, transparent 8px, transparent 16px);
+  box-shadow: 0 0 14px rgba(41, 177, 218, 0.35);
+  transition: width 180ms ease;
+}
+
 .controls-panel {
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, #081221 0%, #091321 100%);
